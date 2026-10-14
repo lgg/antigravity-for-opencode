@@ -246,4 +246,12 @@ export const server = AgyPlugin.server;
 export const setup = AgyPlugin.setup;
 export { AgyPlugin };
 export { setupV2Plugin, buildAgyV2ToolResult, AGY_V2_TOOL_SCHEMA };
-export default AgyPlugin;
+// OpenCode 2 expects a PLAIN OBJECT default export.  Exporting the callable
+// legacy v1 plugin as default triggers PluginModule.LoadError in OpenCode 2.
+// Keep the v1 entrypoint accessible through ./v1 instead.
+const v2Definition = {
+  id: "opencode-agy",
+  server: v1Server,
+  setup: setupV2Plugin,
+};
+export default v2Definition;
