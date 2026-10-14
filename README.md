@@ -180,7 +180,7 @@ Twelve tiers across four models. The `hi` / `med` / `lo` suffix selects the mode
 
 - Stdin is always detached, so agy can never wait on interactive input.
 - Every failure — timeout, quota, auth, crash, empty output, missing CLI — is returned as `AGY_ERROR [<CODE>]` text plus metadata; the host process stays up.
-- Common token patterns are scrubbed from surfaced output and errors (best-effort, not a guarantee); agy's log is teed to a private, owner-only (`0700`) temp directory that is removed on every exit path.
+- Common token patterns are scrubbed from surfaced output and errors (best-effort, not a guarantee); agy's log is teed to a per-run temporary directory (`0700` on POSIX; inherited Windows temp-directory ACLs) that is removed on every exit path.
 - `yolo: true` is denied by default in this fork. To explicitly allow unrestricted Antigravity tool permissions, set `OPENCODE_AGY_ALLOW_YOLO=1` in the OpenCode server process environment. Avoid it for unattended runs.
 - The plugin executes your installed `agy` binary, and therefore inherits the Antigravity CLI's permissions and service data handling. It does not provide independent isolation. Limit task prompts to non-sensitive material.
 - For security, prefer a locally built fork pinned to a commit over an automatically updated npm `@latest` release.
