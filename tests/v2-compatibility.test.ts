@@ -9,7 +9,7 @@ describe("Task 1: package.json contracts & dependencies", () => {
   const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
 
   test("version is bumped to 0.11.0", () => {
-    expect(pkg.version).toBe("0.11.0");
+    expect(pkg.version).toBe("0.12.0");
   });
 
   test("peerDependencies includes both @opencode-ai/plugin and @opencode/plugin", () => {
@@ -282,12 +282,18 @@ describe("Task 3: Universal Dual-Export Entrypoint", () => {
     };
   };
 
-  test("Loader Pattern 1: Default callable AgyPlugin(mockV1Ctx)", async () => {
+  test("Loader Pattern 1: V2 default is an object with id and setup", async () => {
     const mod = await import("../src/index");
-    expect(typeof mod.default).toBe("function");
+    expect(typeof mod.default).toBe("object");
+    expect(mod.default.id).toBe("opencode-agy");
+    expect(typeof mod.default.setup).toBe("function");
+    expect(typeof mod.default.server).toBe("function");
+  });
 
+  test("Separate V1 entrypoint retains callable default", async () => {
+    const mod = await import("../src/v1");
+    expect(typeof mod.default).toBe("function");
     const hooks = await mod.default(fakeV1Ctx());
-    expect(hooks).toBeDefined();
     expect(hooks.tool?.agy).toBeDefined();
     expect(hooks.config).toBeDefined();
   });
