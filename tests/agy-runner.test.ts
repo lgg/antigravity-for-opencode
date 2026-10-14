@@ -1248,8 +1248,11 @@ describe("secure per-run temp-log lifecycle (S1)", () => {
     expect(path.dirname(dir)).toBe(tmpdir());
     expect(path.basename(dir).startsWith("opencode-agy-")).toBe(true);
     expect(path.basename(capturedFile)).toBe("agy.log");
-    // And: live mode was exactly 0700
-    expect(liveMode).toBe(0o700);
+    // POSIX mode bits are meaningful on Unix; Windows reports simulated
+    // modes (often 0666) even after chmod. Directory ACLs apply instead.
+    if (process.platform !== "win32") {
+      expect(liveMode).toBe(0o700);
+    }
     // And: both file and parent directory are absent after settlement
     expect(existsSync(capturedFile)).toBe(false);
     expect(existsSync(dir)).toBe(false);
