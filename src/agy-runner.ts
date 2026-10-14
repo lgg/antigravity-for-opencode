@@ -365,6 +365,14 @@ export async function runAgy(
   spawnFn: SpawnFn = spawn
 ): Promise<AgyResult> {
   const args = buildAgyArgs(opts);
+  // An AI agent must not be able to silently opt into Antigravity's
+  // unrestricted tool permissions just by setting yolo=true.
+  if (opts.yolo && process.env.OPENCODE_AGY_ALLOW_YOLO !== "1") {
+    throw new AgyError(
+      "Unsafe Antigravity permissions disabled. Set OPENCODE_AGY_ALLOW_YOLO=1 explicitly if you accept the risk.",
+      "UNSAFE_PERMISSIONS_DISABLED",
+    );
+  }
   const start = Date.now();
   const requestedConvId = opts.conversation?.trim() || undefined;
 
@@ -487,7 +495,7 @@ export async function runAgy(
     }
 
     const result: AgyResult = {
-      stdout: truncate(out, 100_000),
+      stdout: scrubSecrets(truncate(out, 100_000)),
       stderr: scrubSecrets(truncate(err, 2000)),
       exitCode: exit,
       durationMs,
