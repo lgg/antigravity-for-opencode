@@ -22,8 +22,14 @@ jobs:
           bun-version: 1.4.3
       - name: Install dependencies (no lifecycle scripts)
         run: bun install --ignore-scripts
-      - name: Run unit tests
-        run: bun test tests/security-boundaries.test.ts tests/plugin-load.test.ts tests/v2-compatibility.test.ts
+      - name: Run full test suite (Linux)
+        if: runner.os == 'Linux'
+        run: bun test
+      - name: Run Windows-compatible tests
+        if: runner.os == 'Windows'
+        run: bun test tests/security-boundaries.test.ts tests/plugin-load.test.ts tests/v2-compatibility.test.ts tests/agy-runner.test.ts tests/agy-command.test.ts tests/yolo-sandbox-warning.test.ts
+      - name: Type-check
+        run: bun run typecheck
       - name: Build plugin entrypoints
         run: bun run build
       - name: Verify package entrypoints exist
