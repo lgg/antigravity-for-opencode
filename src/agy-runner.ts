@@ -365,13 +365,22 @@ export async function runAgy(
   spawnFn: SpawnFn = spawn
 ): Promise<AgyResult> {
   const args = buildAgyArgs(opts);
+  // An AI agent must not be able to silently opt into Antigravity's
+  // unrestricted tool permissions just by setting yolo=true.
+  if (opts.yolo && process.env.OPENCODE_AGY_ALLOW_YOLO !== "1") {
+    throw new AgyError(
+      "Unsafe Antigravity permissions disabled. Set OPENCODE_AGY_ALLOW_YOLO=1 explicitly if you accept the risk.",
+      "UNSAFE_PERMISSIONS_DISABLED",
+    );
+  }
   const start = Date.now();
   const requestedConvId = opts.conversation?.trim() || undefined;
 
   // Always tee agy's log to a unique temp file inside a fresh per-run 0700
   // directory under the OS temp dir. mkdtemp atomically creates a unique
-  // directory; chmod ensures owner-only access even if the platform default
-  // is more permissive. The entire directory is removed in finally.
+  // directory; chmod restricts POSIX mode bits. On Windows ACLs from the
+  // user-specific temp directory apply instead (chmod is not an ACL control).
+  // The entire directory is removed in finally.
   const logDir = await mkdtemp(path.join(tmpdir(), "opencode-agy-"));
   let abortHandler: (() => void) | undefined;
   try {
@@ -487,7 +496,7 @@ export async function runAgy(
     }
 
     const result: AgyResult = {
-      stdout: truncate(out, 100_000),
+      stdout: scrubSecrets(truncate(out, 100_000)),
       stderr: scrubSecrets(truncate(err, 2000)),
       exitCode: exit,
       durationMs,

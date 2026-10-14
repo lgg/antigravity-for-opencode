@@ -26,7 +26,7 @@ A thin, non-intrusive OpenCode plugin that spawns the official `agy` CLI as a sa
 - 🔌 **OpenCode 1.x & 2.x** — dual-export plugin with automatic host detection, plus subprocess cancellation on abort (2.x)
 
 > [!NOTE]
-> **Will this get my Antigravity account banned?** No. The plugin spawns the official `agy` CLI in headless mode — the same binary you would run from your terminal, with the same authentication, rate limits, and quota checks enforced by Google's servers. It adds **zero additional calls** beyond what you would make manually.
+> **Account and data safety:** This is an unofficial integration. Using Antigravity through a third-party host may violate applicable provider terms; no one can guarantee that your account will not be restricted. Delegated prompts and any included logs/files are processed by the Antigravity service. Never delegate secrets or sensitive project data without permission.
 
 ## Prerequisites
 
@@ -48,19 +48,19 @@ Add the plugin to `"plugins"` in your `opencode.json` (or `.opencode/config.json
 
 ### OpenCode 1.x
 
-OpenCode 1.x uses the singular `"plugin"` key in `~/.config/opencode/opencode.json` (or your project's `opencode.json`):
+OpenCode 1.x requires the explicit legacy subpath `opencode-agy/v1` (available in the fork build). It uses the singular `"plugin"` key in `~/.config/opencode/opencode.json` (or your project's `opencode.json`):
 
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-agy@latest"]
+  "plugin": ["opencode-agy/v1"]
 }
 ```
 
 Restart OpenCode. The `agy` tool and `/agy` slash command are loaded automatically from npm — no manual copy steps.
 
 > [!TIP]
-> Upgrading from OpenCode 1.x to 2.x? Rename `"plugin"` to `"plugins"` — the plugin detects the host version and mounts the right lifecycle hooks automatically, no code changes needed. If you previously copied `commands/agy.md` into `~/.config/opencode/commands/`, delete it (`rm ~/.config/opencode/commands/agy.md`) to pick up the plugin's bundled slash-command template.
+> Upgrading from OpenCode 1.x to 2.x? Use `"plugins"` and the v2 root entrypoint. The previous callable default export fails OpenCode 2's loader, which requires an object with `id` and `setup`. If you previously copied `commands/agy.md` into `~/.config/opencode/commands/`, delete it (`rm ~/.config/opencode/commands/agy.md`) to pick up the plugin's bundled slash-command template.
 
 ### From source (development only)
 
@@ -180,7 +180,10 @@ Twelve tiers across four models. The `hi` / `med` / `lo` suffix selects the mode
 
 - Stdin is always detached, so agy can never wait on interactive input.
 - Every failure — timeout, quota, auth, crash, empty output, missing CLI — is returned as `AGY_ERROR [<CODE>]` text plus metadata; the host process stays up.
-- Secrets are scrubbed from surfaced errors, and agy's log is teed to a private, owner-only (`0700`) temp directory that is removed on every exit path.
+- Common token patterns are scrubbed from surfaced output and errors (best-effort, not a guarantee); agy's log is teed to a per-run temporary directory (`0700` on POSIX; inherited Windows temp-directory ACLs) that is removed on every exit path.
+- `yolo: true` is denied by default in this fork. To explicitly allow unrestricted Antigravity tool permissions, set `OPENCODE_AGY_ALLOW_YOLO=1` in the OpenCode server process environment. Avoid it for unattended runs.
+- The plugin executes your installed `agy` binary, and therefore inherits the Antigravity CLI's permissions and service data handling. It does not provide independent isolation. Limit task prompts to non-sensitive material.
+- For security, prefer a locally built fork pinned to a commit over an automatically updated npm `@latest` release.
 - Output is truncated at 100,000 characters as a hard safety cap.
 - Timeouts are handled by agy's own `--print-timeout`, user-controllable via the `timeout` argument.
 - The calling agent owns verification: review the diff before trusting delegated changes.

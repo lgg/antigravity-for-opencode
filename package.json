@@ -9,6 +9,10 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./v1": {
+      "import": "./dist/v1.js",
+      "types": "./dist/v1.d.ts"
     }
   },
   "files": [
@@ -39,7 +43,7 @@
     "headless"
   ],
   "scripts": {
-    "build": "bun build ./src/index.ts --outdir ./dist --target bun --format esm",
+    "build": "bun build ./src/index.ts ./src/v1.ts --outdir ./dist --target bun --format esm",
     "build:types": "bunx tsc --emitDeclarationOnly",
     "build:all": "bun run build && bun run build:types",
     "test": "bun test",
