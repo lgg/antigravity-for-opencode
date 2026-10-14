@@ -1,0 +1,33 @@
+name: Verify
+
+on:
+  push:
+    branches: [main, "fix/**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+      - name: Install dependencies (no lifecycle scripts)
+        run: bun install --ignore-scripts
+      - name: Run unit tests
+        run: bun test tests/security-boundaries.test.ts tests/plugin-load.test.ts tests/v2-compatibility.test.ts
+      - name: Build plugin entrypoints
+        run: bun run build
+      - name: Verify package entrypoints exist
+        shell: bash
+        run: |
+          test -f dist/index.js
+          test -f dist/v1.js
