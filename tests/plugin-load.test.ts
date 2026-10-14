@@ -60,7 +60,10 @@ describe("plugin module shape", () => {
   test("exports AgyPlugin as default and named", async () => {
     const mod = await import("../src/index.ts");
     expect(typeof mod.AgyPlugin).toBe("function");
-    expect(typeof mod.default).toBe("function");
+    expect(typeof mod.default).toBe("object");
+    expect(mod.default.id).toBe("opencode-agy");
+    expect(typeof mod.default.setup).toBe("function");
+    expect(typeof mod.default.server).toBe("function");
   });
 
   test("plugin function returns hooks with exactly tool + config", async () => {
