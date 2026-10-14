@@ -378,8 +378,9 @@ export async function runAgy(
 
   // Always tee agy's log to a unique temp file inside a fresh per-run 0700
   // directory under the OS temp dir. mkdtemp atomically creates a unique
-  // directory; chmod ensures owner-only access even if the platform default
-  // is more permissive. The entire directory is removed in finally.
+  // directory; chmod restricts POSIX mode bits. On Windows ACLs from the
+  // user-specific temp directory apply instead (chmod is not an ACL control).
+  // The entire directory is removed in finally.
   const logDir = await mkdtemp(path.join(tmpdir(), "opencode-agy-"));
   let abortHandler: (() => void) | undefined;
   try {
