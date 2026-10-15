@@ -63,6 +63,7 @@ describe("safe delegated review policy", () => {
       sandbox: true,
     }, mockSpawn);
     expect(result.stdout).toBe("Looks fine");
+    expect(result.conversationId).toBe("abc-def");
     expect(path.basename(actualCwd).startsWith("opencode-agy-")).toBe(true);
     expect(actualEnv).toBeDefined();
   });
@@ -125,6 +126,29 @@ describe("safe delegated review policy", () => {
       if (original === undefined) delete process.env.OPENCODE_AGY_ALLOWED_DIRS;
       else process.env.OPENCODE_AGY_ALLOWED_DIRS = original;
       rmSync(testDir, { recursive: true, force: true });
+    }
+  });
+
+  test("resume and non-Flash / model overrides must be explicitly enabled", async () => {
+    const previousResume = process.env.OPENCODE_AGY_ALLOW_RESUME;
+    const previousModels = process.env.OPENCODE_AGY_ALLOW_OTHER_MODELS;
+    try {
+      delete process.env.OPENCODE_AGY_ALLOW_RESUME;
+      delete process.env.OPENCODE_AGY_ALLOW_OTHER_MODELS;
+      await rejectedWith("RESUME_NOT_ALLOWED", () => runAgy({
+        prompt: "review", analysisOnly: true, continue: true,
+      }));
+      await rejectedWith("MODEL_NOT_ALLOWED", () => runAgy({
+        prompt: "review", analysisOnly: true, tier: "claude-opus-5-5-hi",
+      }));
+      await rejectedWith("MODEL_NOT_ALLOWED", () => runAgy({
+        prompt: "review", analysisOnly: true, model: "custom-expensive-model",
+      }));
+    } finally {
+      if (previousResume === undefined) delete process.env.OPENCODE_AGY_ALLOW_RESUME;
+      else process.env.OPENCODE_AGY_ALLOW_RESUME = previousResume;
+      if (previousModels === undefined) delete process.env.OPENCODE_AGY_ALLOW_OTHER_MODELS;
+      else process.env.OPENCODE_AGY_ALLOW_OTHER_MODELS = previousModels;
     }
   });
 
