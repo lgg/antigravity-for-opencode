@@ -2,7 +2,7 @@ name: Verify
 
 on:
   push:
-    branches: [main, "fix/**"]
+    branches: [main, "fix/**", "feat/**"]
   pull_request:
 
 permissions:
@@ -27,7 +27,7 @@ jobs:
         run: bun test
       - name: Run Windows-compatible tests
         if: runner.os == 'Windows'
-        run: bun test tests/security-boundaries.test.ts tests/plugin-load.test.ts tests/v2-compatibility.test.ts tests/agy-runner.test.ts tests/agy-command.test.ts tests/yolo-sandbox-warning.test.ts
+        run: bun test tests/delegation-policy.test.ts tests/security-boundaries.test.ts tests/plugin-load.test.ts tests/v2-compatibility.test.ts tests/agy-runner.test.ts tests/agy-command.test.ts tests/yolo-sandbox-warning.test.ts
       - name: Type-check
         run: bun run typecheck
       - name: Build plugin entrypoints
