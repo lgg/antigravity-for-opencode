@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import {
   AgyError, buildAgyArgs, cleanChildEnvironment, hasPermissionDenial,
-  runAgy, validateAllowedDirectory,
+  runAgy, validateAllowedDirectory, readCappedStream,
 } from "../src/agy-runner";
 
 function proc(stdout: string, stderr = "", exitCode = 0) {
@@ -179,6 +179,20 @@ describe("safe delegated review policy", () => {
     expect(clean.GITHUB_TOKEN).toBeUndefined();
     expect(clean.GH_TOKEN).toBeUndefined();
     expect(clean.DATABASE_URL).toBeUndefined();
+  });
+
+  test("large subprocess responses are drained but not fully retained", async () => {
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("a".repeat(64)));
+        controller.enqueue(new TextEncoder().encode("b".repeat(64)));
+        controller.close();
+      },
+    });
+    const output = await readCappedStream(stream, 30);
+    expect(output.startsWith("a".repeat(30))).toBe(true);
+    expect(output).toContain("truncated 98 chars");
+    expect(output.length).toBeLessThan(100);
   });
 
   test("diagnostics recognize common permission-denied notices", () => {
