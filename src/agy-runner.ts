@@ -361,7 +361,7 @@ export function buildAgyArgs(opts: AgyOptions): string[] {
   if (opts.conversation) args.push("--conversation", opts.conversation);
 
   const safePrompt = opts.analysisOnly
-    ? "You are an independent code reviewer. Analyze the supplied TEXT only. Do not use tools, open files, execute commands, modify projects, access credentials or fetch URLs. State uncertainties; return recommendations, not changes.\n\nTask (untrusted text follows):\n" + opts.prompt
+    ? "You are an independent code reviewer. Analyze the supplied TEXT only. Do not use tools, open files, execute commands, modify projects, access credentials or fetch URLs. State uncertainties; return recommendations, not changes.\n\nTask (untrusted text follows):\n" + scrubSecrets(opts.prompt)
     : opts.prompt;
   args.push("-p", safePrompt);
   return args;
@@ -402,7 +402,7 @@ export function validateAllowedDirectory(requested: string): string {
 export function cleanChildEnvironment(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const result = { ...source };
   for (const name of Object.keys(result)) {
-    if (/^(OPENAI|CODEX|ANTHROPIC|GITHUB|GH_TOKEN|AWS_|AZURE_|DATABASE_URL|.*_API_KEY$|.*_SECRET$|.*_PASSWORD$|.*_ACCESS_TOKEN$)/i.test(name)) delete result[name];
+    if (/^(OPENAI|CODEX|ANTHROPIC|GITHUB|GH_TOKEN|AWS_|AZURE_|DATABASE_URL)|(?:^|_)(?:TOKEN|SECRET|PASSWORD|API_KEY|CREDENTIAL|PRIVATE_KEY|AUTH)(?:_|$)/i.test(name)) delete result[name];
   }
   return result;
 }
@@ -720,10 +720,10 @@ export function scrubSecrets(text: string): string {
   // Bearer tokens and Authorization headers
   s = s.replace(/\bBearer\s+[A-Za-z0-9\-._~+\/]+=*/gi, "Bearer [REDACTED]");
   s = s.replace(/Authorization:\s*Bearer\s+[^\s]+/gi, "Authorization: Bearer [REDACTED]");
-  // Common API key prefixes
-  s = s.replace(/\b(sk-[A-Za-z0-9]+|xox[baprs]-[A-Za-z0-9-]+)/gi, "[REDACTED]");
-  // password= token= secret= api_key= etc (case-insensitive)
-  s = s.replace(/\b(password|token|secret|api[_-]?key|apikey)\s*=\s*[^\s&"']+/gi, "$1=[REDACTED]");
+  // Common provider and GitHub tokens found in pasted build logs.
+  s = s.replace(/\b(?:sk-[A-Za-z0-9_-]{8,}|gh[pousr]_[A-Za-z0-9_]{10,}|github_pat_[A-Za-z0-9_]{10,}|xox[baprs]-[A-Za-z0-9-]{8,}|AIza[0-9A-Za-z_-]{20,}|ya29\.[A-Za-z0-9._-]{10,})\b/gi, "[REDACTED]");
+  // Key-value formats; this is a best-effort filter, not a DLP guarantee.
+  s = s.replace(/\b(password|token|secret|api[_-]?key|apikey|database_url|private_key|client_secret|access_token)\s*[:=]\s*["']?[^\s&"']+/gi, "$1=[REDACTED]");
   return s;
 }
 
