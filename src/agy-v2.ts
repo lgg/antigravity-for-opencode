@@ -226,10 +226,38 @@ export async function setupV2Plugin(ctx: any): Promise<void> {
   if (typeof ctx.command?.transform === "function") {
     await ctx.command.transform((editor: any) => {
       const cmd = createAgyCommand();
+      // OpenCode 2 CommandDefinition requires execute({ sessionID, prompt,
+      // delivery }). A V1-style `template` property is NOT executable and
+      // causes "n.execute is not a function" during session setup.
       const cmdDef = {
         name: "agy",
         description: cmd.description,
-        template: cmd.template,
+        execute: async ({
+          sessionID,
+          prompt,
+          delivery,
+        }: {
+          sessionID: string;
+          prompt: { text: string; [key: string]: unknown };
+          delivery: "steer" | "queue";
+        }) => {
+          if (typeof ctx.session?.prompt !== "function") {
+            throw new Error("OpenCode 2 session.prompt API is unavailable");
+          }
+          const suppliedText = typeof prompt?.text === "string" ? prompt.text : "";
+          if (!suppliedText.trim()) {
+            throw new Error("Usage: /agy <text to review>");
+          }
+          // Invoke the host agent once using the documented command API.
+          // The host agent delegates analysis via the registered agy tool.
+          // Preserve selected model, attachments and queue/steer semantics.
+          await ctx.session.prompt({
+            ...prompt,
+            sessionID,
+            text: cmd.template.replace("$ARGUMENTS", suppliedText),
+            delivery,
+          });
+        },
       };
 
       if (typeof editor?.add === "function") {
