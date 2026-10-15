@@ -186,6 +186,9 @@ export async function setupV2Plugin(ctx: any): Promise<void> {
           "Gemini runs in a temporary working directory with sandbox enabled by default, " +
           "and cannot receive --add-dir without a user-configured directory allowlist. " +
           "Tools needing headless approval can be denied; the main agent MUST verify conclusions.",
+        // Make the review tool directly available to the host model (not
+        // hidden behind a Code Mode namespace). This matters for /agy.
+        options: { codemode: false },
         schema: AGY_V2_TOOL_SCHEMA,
         input: AGY_V2_TOOL_SCHEMA,
         parameters: AGY_V2_TOOL_SCHEMA,
@@ -226,10 +229,44 @@ export async function setupV2Plugin(ctx: any): Promise<void> {
   if (typeof ctx.command?.transform === "function") {
     await ctx.command.transform((editor: any) => {
       const cmd = createAgyCommand();
+      // OpenCode 2 CommandDefinition requires execute({ sessionID, prompt,
+      // delivery }). A V1-style `template` property is NOT executable and
+      // causes "n.execute is not a function" during session setup.
       const cmdDef = {
         name: "agy",
         description: cmd.description,
-        template: cmd.template,
+        execute: async ({
+          sessionID,
+          prompt,
+          delivery,
+        }: {
+          sessionID: string;
+          prompt: { text: string; [key: string]: unknown };
+          delivery: "steer" | "queue";
+        }) => {
+          if (typeof ctx.session?.prompt !== "function") {
+            throw new Error("OpenCode 2 session.prompt API is unavailable");
+          }
+          const suppliedText = typeof prompt?.text === "string" ? prompt.text : "";
+          if (!suppliedText.trim()) {
+            throw new Error("Usage: /agy <text to review>");
+          }
+          // Invoke the host agent once using the documented command API.
+          // The host agent delegates analysis via the registered agy tool.
+          // Preserve selected model, attachments and queue/steer semantics.
+          await ctx.session.prompt({
+            ...prompt,
+            sessionID,
+            text:
+              "Explicit /agy command: call the registered agy review tool exactly once " +
+              "with the user-provided text below, then report its output. " +
+              "Do not run other tools or modify files. If the text says not to use " +
+              "tools, that instruction applies to the Gemini reviewer, not to " +
+              "your required agy tool call.\n\n" +
+              cmd.template.replace("$ARGUMENTS", suppliedText),
+            delivery,
+          });
+        },
       };
 
       if (typeof editor?.add === "function") {

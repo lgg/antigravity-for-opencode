@@ -218,11 +218,13 @@ describe("Task 2: Subprocess Cancellation & V2 Adapter", () => {
     expect(toolRegistered.name).toBe("agy");
     expect(toolRegistered.description).toBeDefined();
     expect(typeof toolRegistered.execute).toBe("function");
+    expect(toolRegistered.options?.codemode).toBe(false);
 
     expect(commandRegistered).toBeDefined();
     expect(commandRegistered.name).toBe("agy");
     expect(commandRegistered.description).toBeDefined();
-    expect(commandRegistered.template).toBeDefined();
+    expect(typeof commandRegistered.execute).toBe("function");
+    expect(commandRegistered.template).toBeUndefined();
   });
 
   test("setupV2Plugin(ctx): defensive when ctx.command or transforms are undefined", async () => {
