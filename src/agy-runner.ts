@@ -461,7 +461,11 @@ export async function runAgy(
     throw new AgyError("Cloud project selection is not enabled for delegated analysis.", "CLOUD_PROJECT_DISABLED");
   }
   if (opts.analysisOnly && opts.dir) {
-    validateAllowedDirectory(opts.dir);
+    // Forward the resolved canonical path rather than a user-controlled
+    // symlink/relative spelling after validation.
+    const realDir = validateAllowedDirectory(opts.dir);
+    const index = args.indexOf("--add-dir");
+    if (index >= 0) args[index + 1] = realDir;
   }
   if (opts.analysisOnly && (opts.continue || opts.conversation) && process.env.OPENCODE_AGY_ALLOW_RESUME !== "1") {
     throw new AgyError("Resuming earlier conversations is disabled for isolated review; pass context in the prompt.", "RESUME_NOT_ALLOWED");
