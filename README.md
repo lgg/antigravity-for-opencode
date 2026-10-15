@@ -188,7 +188,7 @@ to running under an isolated operating-system account or virtual machine.
   filesystem tool read-only on Windows.
 - In headless mode denied actions may return exit status 0: check the tool's
   structured status and stderr notices.
-- The plugin's output scrubbing is best-effort and cannot protect secrets
+- The plugin's outgoing prompt and output scrubbing are best-effort and cannot protect secrets
   already sent to Gemini or exposed by the underlying CLI.
 - The agy executable is resolved from PATH; review installations and avoid
   untrusted PATH entries. Pin this fork to a commit instead of following a
@@ -205,19 +205,10 @@ bun run typecheck
 bun run build:all
 ```
 
-Windows CI runs the host-compatible tests; Linux CI runs the full test
-suite. A real local OpenCode 2.x and Agy 1.3.x smoke test is still needed
-before unattended use.
-
-
-
-```bash
-bun test           # unit + integration tests
-bun run typecheck
-bun run build:all
-```
-
-Tests cover argument building and tier mapping, every error path (quota, auth, timeout, not found, empty, truncation), plugin shape (the `agy` tool and `/agy` command register correctly), and real agy integration.
+Windows CI runs host-compatible tests; Linux CI runs the full test
+suite. A real local OpenCode 2.x + Agy 1.3.x smoke test is still needed
+before unattended use. Tests cover argument mapping, denied permissions,
+JSON statuses, optional directory access, process cancellation and timeouts.
 
 ## Philosophy
 
