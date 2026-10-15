@@ -33,7 +33,7 @@ export const AGY_V2_TOOL_SCHEMA = {
     },
     dir: {
       type: "string",
-      description: "Workspace directory to give agy (--add-dir).",
+      description: "Explicitly approved directory to give agy (--add-dir). Disabled by default; requires OPENCODE_AGY_ALLOWED_DIRS.",
     },
     project: {
       type: "string",
@@ -51,8 +51,7 @@ export const AGY_V2_TOOL_SCHEMA = {
     yolo: {
       type: "boolean",
       description:
-        "Auto-approve every tool inside agy (--dangerously-skip-permissions). Use only with --sandbox or throwaway dirs. " +
-        "Required for local file analysis (PDF/image) — agy's MCP tools need auto-approval in headless mode.",
+        "UNSAFE unrestricted permission mode. Blocked by default, requires user environment opt-in. Do not use for unattended review.",
     },
     sandbox: {
       type: "boolean",
@@ -140,7 +139,7 @@ function formatV2Error(err: unknown): AgyV2ToolResult {
       err.message,
       err.details ? JSON.stringify(err.details, null, 2) : "",
       "",
-      "agy sub-agent failed. Decide whether to retry with higher timeout (see details.suggestedNextTimeout or durationMs), change tier, use --continue/--conversation, enable --sandbox (or not for merges), or handle manually.",
+      "agy review failed. Check permissions, model, and timeout; the main agent should continue safely without Gemini if unavailable.",
       resumeHint,
     ].join("\n");
 
@@ -180,14 +179,13 @@ export async function setupV2Plugin(ctx: any): Promise<void> {
       const toolDef = {
         name: "agy",
         description:
-          "Delegate a well-scoped task to Antigravity (agy / Gemini) in headless mode. " +
-          "Best for bulk work, scaffolding, tests, research, or cross-model verification. " +
-          "The main agent MUST verify the result. " +
-          "Supports resume (`continue` / `conversation`) and `--sandbox` for safer tool use. " +
-          "For local file analysis (PDF, PNG, images), set `dir` to the file's parent directory AND set `yolo: true`. " +
-          "In headless mode, agy's file-reading tools (pdf-reader, read_file) default to 'Ask' permission which deadlocks without a TTY. " +
-          "`yolo: true` auto-approves all tool permissions; `dir` scopes the workspace so agy can access the file. " +
-          "`sandbox: true` is compatible with file reads (restricts only terminal commands).",
+          "Ask Antigravity/Gemini to independently analyze supplied text, review code excerpts, " +
+          "interpret test logs, suggest test cases, or identify bugs. " +
+          "Do NOT delegate code edits, Docker operations, git commands, deployment, or system changes: " +
+          "the OpenCode main agent handles these actions. " +
+          "Gemini runs in a temporary working directory with sandbox enabled by default, " +
+          "and cannot receive --add-dir without a user-configured directory allowlist. " +
+          "Tools needing headless approval can be denied; the main agent MUST verify conclusions.",
         schema: AGY_V2_TOOL_SCHEMA,
         input: AGY_V2_TOOL_SCHEMA,
         parameters: AGY_V2_TOOL_SCHEMA,
@@ -200,13 +198,15 @@ export async function setupV2Plugin(ctx: any): Promise<void> {
               project: args.project,
               timeout: args.timeout,
               yolo: args.yolo,
-              sandbox: args.sandbox,
+              sandbox: args.sandbox ?? true,
+              structuredOutput: true,
+              analysisOnly: true,
               continue: args.continue,
               conversation: args.conversation,
               model: args.model,
               signal: context?.signal,
             });
-            return buildAgyV2ToolResult(result, args);
+            return buildAgyV2ToolResult(result, { ...args, sandbox: args.sandbox ?? true });
           } catch (err: unknown) {
             return formatV2Error(err);
           }
