@@ -218,6 +218,7 @@ describe("Task 2: Subprocess Cancellation & V2 Adapter", () => {
     expect(toolRegistered.name).toBe("agy");
     expect(toolRegistered.description).toBeDefined();
     expect(typeof toolRegistered.execute).toBe("function");
+    expect(toolRegistered.options?.codemode).toBe(false);
 
     expect(commandRegistered).toBeDefined();
     expect(commandRegistered.name).toBe("agy");
