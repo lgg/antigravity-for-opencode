@@ -20,8 +20,8 @@ A thin OpenCode plugin that delegates **review of supplied text** to the install
 ## Features
 
 - 🤖 **One tool, one command** — minimal surface: a single `agy` tool, a single `/agy` slash command, one config hook
-- 🧠 **12 model tiers** — Gemini 3.8 Flash, Claude Sonnet 5.5, Claude Opus 5.5, and Gemini 4 Argon, each with low / medium / high reasoning effort
-- 🔁 **Resumable** — resume any agy conversation by ID or with `continue`, so long tasks survive timeouts
+- 🧠 **Gemini 3.8 Flash by default** — other tiers and exact model overrides require an explicit opt-in
+- 🔁 **Resumable (opt-in)** — previous conversations require explicit `OPENCODE_AGY_ALLOW_RESUME=1`
 - 🛡️ **Failures are data** — timeouts, quota, auth, denied permissions, non-SUCCESS status and malformed JSON produce explicit errors
 - 🔌 **OpenCode 1.x & 2.x** — separate v1/v2 entrypoints plus subprocess cancellation and a timeout watchdog
 
@@ -33,53 +33,46 @@ A thin OpenCode plugin that delegates **review of supplied text** to the install
 - The **Antigravity CLI** (`agy`): installed, on your `PATH`, and signed in (run `agy` once interactively to authenticate)
 - **OpenCode** 1.x or 2.x
 
-## Installation
+## Install the audited fork (OpenCode 2.x)
 
-### OpenCode 2.x
+**Do not install `opencode-agy@latest` from npm for this fork.** The
+upstream published 0.12.0 has an incompatible default export on OpenCode
+2.0.28, and that npm package is not maintained by this fork.
 
-Add the plugin to `"plugins"` in your `opencode.json` (or `.opencode/config.json`):
+From PowerShell 5.1 on Windows 10 (adjust directory if desired):
+
+```powershell
+$repo = Join-Path $HOME "dev\antigravity-for-opencode"
+git clone https://github.com/lgg/antigravity-for-opencode.git $repo
+Set-Location $repo
+# Pin a reviewed commit here instead of floating main:
+# git checkout <reviewed-commit-sha>
+bun install --ignore-scripts
+bun run typecheck
+bun run build
+$pluginUri = ([Uri](Resolve-Path .\dist\index.js).Path).AbsoluteUri
+$pluginUri
+```
+
+In `$HOME\.config\opencode\opencode.json`, preserve all existing model,
+OAuth and provider settings, and update **only** the `plugins` array:
 
 ```json
 {
-  "$schema": "https://opencode.ai/config.json",
-  "plugins": ["opencode-agy@latest"]
+  "plugins": [
+    "oc-codex-multi-auth",
+    "file:///C:/Users/YOUR_USER/dev/antigravity-for-opencode/dist/index.js"
+  ]
 }
 ```
 
-### OpenCode 1.x
+Replace the example URI with `$pluginUri` from your PowerShell. Do not
+overwrite the rest of your existing JSON. Restart OpenCode, run
+`opencode plugin list`, then use `/agy` with a harmless text-only
+review. Do not start an unattended Ralph cycle until this smoke test passes.
 
-OpenCode 1.x requires the explicit legacy subpath `opencode-agy/v1` (available in the fork build). It uses the singular `"plugin"` key in `~/.config/opencode/opencode.json` (or your project's `opencode.json`):
-
-```json
-{
-  "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-agy/v1"]
-}
-```
-
-Restart OpenCode. The `agy` tool and `/agy` slash command are loaded automatically from npm — no manual copy steps.
-
-> [!TIP]
-> Upgrading from OpenCode 1.x to 2.x? Use `"plugins"` and the v2 root entrypoint. The previous callable default export fails OpenCode 2's loader, which requires an object with `id` and `setup`. If you previously copied `commands/agy.md` into `~/.config/opencode/commands/`, delete it (`rm ~/.config/opencode/commands/agy.md`) to pick up the plugin's bundled slash-command template.
-
-### From source (development only)
-
-```bash
-git clone https://github.com/chigarow/antigravity-for-opencode.git
-cd antigravity-for-opencode
-bun install
-bun run build:all
-```
-
-Then point OpenCode at the build output and restart:
-
-```json
-{
-  "plugins": ["file:///absolute/path/to/antigravity-for-opencode/dist/index.js"]
-}
-```
-
-Use `"plugin"` instead of `"plugins"` on OpenCode 1.x.
+OpenCode 1.x needs `plugin` (singular) and a local
+`file:///.../dist/v1.js` entrypoint; this fork's primary target is 2.x.
 
 ## Usage: review-only delegated Gemini (default)
 
@@ -117,6 +110,10 @@ of this plugin.
   drive roots, credentials or private projects.
 - Passing `project` (Google Cloud project selector) is blocked unless
   `OPENCODE_AGY_ALLOW_CLOUD_PROJECT=1` is set.
+- `continue` and `conversation` are disabled for isolated review unless
+  `OPENCODE_AGY_ALLOW_RESUME=1` is explicitly configured.
+- Non-Flash tiers and exact `model` overrides are rejected by default.
+  To enable additional models, set `OPENCODE_AGY_ALLOW_OTHER_MODELS=1` yourself.
 - Delegated child processes receive a filtered subset of the parent
   environment, excluding common OpenAI, Codex, GitHub and cloud secret keys.
   The plugin cannot prevent access to secrets stored elsewhere.
@@ -149,7 +146,7 @@ file access on Windows; setting `dir` widens access.
 
 The tool accepts `prompt`, `tier`, `timeout`, `model`, `continue`,
 `conversation`, `dir`, `project`, `sandbox`, and `yolo`.
-Use `continue` and `conversation` only for earlier review-only sessions.
+Use `continue` and `conversation` only for prior review-only sessions and only after opting in. Other models require opt-in.
 Tier defaults to `flash-3.8-med` if available to the authenticated account.
 
 ### Slash command
@@ -160,7 +157,7 @@ Tier defaults to `flash-3.8-med` if available to the authenticated account.
 
 ## Model tiers
 
-Twelve tiers across four models. The `hi` / `med` / `lo` suffix selects the model's reasoning effort. All tiers default to a 15-minute timeout (see [`timeout`](#arguments)).
+The `hi` / `med` / `lo` suffix selects reasoning effort. Gemini 3.8 Flash tiers are enabled by default for delegated reviews; the remaining tiers require explicit opt-in. All tiers default to a 15-minute timeout.
 
 | Tiers | Model | Account |
 | --- | --- | --- |
