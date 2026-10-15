@@ -50,7 +50,8 @@ Set-Location $repo
 bun install --ignore-scripts
 bun run typecheck
 bun run build
-$pluginUri = ([Uri](Resolve-Path .\dist\index.js).Path).AbsoluteUri
+# OpenCode 2.0.28: configure the DIRECTORY, not a direct dist/index.js path.
+$pluginUri = (New-Object System.Uri(((Resolve-Path .).Path.TrimEnd('\\') + '\\'))).AbsoluteUri
 $pluginUri
 ```
 
@@ -61,15 +62,29 @@ OAuth and provider settings, and update **only** the `plugins` array:
 {
   "plugins": [
     "oc-codex-multi-auth",
-    "file:///C:/Users/YOUR_USER/dev/antigravity-for-opencode/dist/index.js"
+    "file:///C:/Users/YOUR_USER/dev/antigravity-for-opencode"
   ]
 }
 ```
 
-Replace the example URI with `$pluginUri` from your PowerShell. Do not
-overwrite the rest of your existing JSON. Restart OpenCode, run
-`opencode plugin list`, then use `/agy` with a harmless text-only
-review. Do not start an unattended Ralph cycle until this smoke test passes.
+Replace the example URI with `$pluginUri` from PowerShell. Do not
+overwrite the rest of your existing JSON. Restart OpenCode and inspect
+startup logs:
+
+```powershell
+opencode models --standalone --print-logs --log-level debug 2>&1 |
+  Select-String "configured plugin path|loading plugin|failed to load plugin|opencode-agy|antigravity-for-opencode" -Context 1,2
+```
+
+Do **not** use `opencode plugin list` to verify a local directory: it
+lists managed package plugins, so a successfully loaded local plugin
+may not appear there. Confirm that it loads in the server logs, then
+test `/agy` with a harmless text-only review. Some OpenCode 2.0.x
+versions silently reject direct `.js` entries in `plugins` with
+`configured plugin path must be a directory`. See
+[upstream OpenCode issue #49608](https://github.com/anomalyco/opencode/issues/49608).
+
+Do not start an unattended Ralph cycle until this smoke test passes.
 
 OpenCode 1.x needs `plugin` (singular) and a local
 `file:///.../dist/v1.js` entrypoint; this fork's primary target is 2.x.
