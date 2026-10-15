@@ -411,6 +411,34 @@ export function hasPermissionDenial(stderr: string): boolean {
   return /(?:permission|approval|confirmation|authorization|tool execution)[^\n]{0,90}(?:denied|rejected|blocked|required|not granted|needed|cannot obtain)|(?:denied|rejected|blocked)[^\n]{0,90}(?:permission|approval|tool execution)/i.test(stderr);
 }
 
+/**
+ * Drain the entire pipe while retaining only a bounded prefix.
+ * Avoids holding huge tool output in RAM on low-memory Windows hosts.
+ * The drain prevents subprocesses from deadlocking on a full stdout pipe.
+ */
+export async function readCappedStream(stream: ReadableStream<Uint8Array>, cap = 1_000_000): Promise<string> {
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let output = "";
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value, { stream: true });
+      total += chunk.length;
+      const remaining = Math.max(0, cap - output.length);
+      if (remaining > 0) output += chunk.slice(0, remaining);
+    }
+    const tail = decoder.decode();
+    total += tail.length;
+    if (output.length < cap) output += tail.slice(0, cap - output.length);
+    return total > cap ? output + `\n... [truncated ${total - cap} chars]` : output;
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 export type SpawnFn = typeof spawn;
 
 export async function runAgy(
@@ -507,8 +535,8 @@ export async function runAgy(
     }
 
     const [out, err, exit] = await Promise.all([
-      new Response(proc.stdout).text(),
-      new Response(proc.stderr).text(),
+      readCappedStream(proc.stdout, 1_000_000),
+      readCappedStream(proc.stderr, 32_000),
       proc.exited,
     ]);
 
