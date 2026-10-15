@@ -12,7 +12,7 @@
 
 </div>
 
-A thin, non-intrusive OpenCode plugin that spawns the official `agy` CLI as a safe sub-agent. It provides exactly two surfaces:
+A thin OpenCode plugin that delegates **review of supplied text** to the installed `agy` CLI in headless mode. It is not a security sandbox. It provides exactly two surfaces:
 
 - **Tool `agy`** — the main agent calls it to delegate scoped work.
 - **Slash command `/agy`** — type `/agy your task` directly in the TUI.
@@ -22,8 +22,8 @@ A thin, non-intrusive OpenCode plugin that spawns the official `agy` CLI as a sa
 - 🤖 **One tool, one command** — minimal surface: a single `agy` tool, a single `/agy` slash command, one config hook
 - 🧠 **12 model tiers** — Gemini 3.8 Flash, Claude Sonnet 5.5, Claude Opus 5.5, and Gemini 4 Argon, each with low / medium / high reasoning effort
 - 🔁 **Resumable** — resume any agy conversation by ID or with `continue`, so long tasks survive timeouts
-- 🛡️ **Failures are data** — timeouts, quota, auth errors, and crashes are returned as structured text; the host agent never crashes
-- 🔌 **OpenCode 1.x & 2.x** — dual-export plugin with automatic host detection, plus subprocess cancellation on abort (2.x)
+- 🛡️ **Failures are data** — timeouts, quota, auth, denied permissions, non-SUCCESS status and malformed JSON produce explicit errors
+- 🔌 **OpenCode 1.x & 2.x** — separate v1/v2 entrypoints plus subprocess cancellation and a timeout watchdog
 
 > [!NOTE]
 > **Account and data safety:** This is an unofficial integration. Using Antigravity through a third-party host may violate applicable provider terms; no one can guarantee that your account will not be restricted. Delegated prompts and any included logs/files are processed by the Antigravity service. Never delegate secrets or sensitive project data without permission.
@@ -81,82 +81,81 @@ Then point OpenCode at the build output and restart:
 
 Use `"plugin"` instead of `"plugins"` on OpenCode 1.x.
 
-## Usage
+## Usage: review-only delegated Gemini (default)
 
-### Tool
-
-The main agent calls the `agy` tool to delegate scoped work:
-
-```json
-{
-  "prompt": "merge feature/auth into main, resolve conflicts, run the full test suite",
-  "tier": "claude-opus-5-5-hi",
-  "timeout": "30m",
-  "dir": "/path/to/your/repo"
-}
-```
-
-#### Arguments
-
-| Argument | Type | Description |
-| --- | --- | --- |
-| `prompt` | `string` | **Required.** The task to send to agy. |
-| `tier` | `string` | Model tier, see [Model tiers](#model-tiers). Default: `flash-3.8-med`. |
-| `dir` | `string` | Workspace directory exposed to agy (`--add-dir`). |
-| `project` | `string` | Project name passed to agy (`--project <value>`), e.g. to scope work to a specific Google Cloud project. |
-| `timeout` | `string \| number` | Duration like `30m` or `300s`, or raw milliseconds (`300000` = `5m`). Default `15m` for all tiers, hard cap `4h` (anything above is clamped). `0` / `0s` is valid. |
-| `yolo` | `boolean` | Auto-approve permissions inside agy (`--dangerously-skip-permissions`). Since Agy 1.3.2 this no longer auto-approves `/plan` artifacts. Use deliberately, on a reviewed diff or throwaway branch/worktree. |
-| `sandbox` | `boolean` | Run agy with terminal restrictions (`--sandbox`). Can block merge or filesystem-heavy work. |
-| `continue` | `boolean` | Resume the most recent agy conversation. Mutually exclusive with `conversation`. |
-| `conversation` | `string` | Resume a specific agy conversation by ID. Mutually exclusive with `continue`. |
-| `model` | `string` | Exact model name override, including non-Gemini backends when the CLI supports them. |
-
-#### Long-running work
-
-For git merges with conflicts, heavy refactors, or large test generation: prefer a reviewed diff, a fresh branch or worktree, and a clear rollback plan. If the task hits the limit, the plugin returns `AGY_ERROR [TIMEOUT]` with the observed duration and a `suggestedNextTimeout`, so the caller can retry with `continue: true` or `conversation: <id>` instead of re-prompting:
-
-```ts
-// Pseudocode for an agent catching a TIMEOUT
-try {
-  await agy({ prompt: "merge feature/auth into main", tier: "claude-opus-5-5-hi", timeout: "20m" });
-} catch (e) {
-  if (e.code !== "TIMEOUT") throw e;
-  const { conversationId, suggestedNextTimeout } = e.details;
-  await agy({
-    prompt: "keep going, finish the merge",
-    conversation: conversationId, // or continue: true for the most recent one
-    timeout: suggestedNextTimeout ?? "30m",
-  });
-}
-```
-
-The conversation ID is extracted from agy's log and surfaced on every success result and error `details`. Pass it back exactly as received.
-
-#### Local file analysis
-
-> [!IMPORTANT]
-> Analyzing a local file (PDF, PNG, any binary agy's tools can read) in headless mode requires **both** `dir` (pointed at the file's parent directory) **and** `yolo: true`. In `--print` mode agy has no TTY, and its file-reading tools default to an "Ask" permission that can never be answered — so without `yolo: true` the call deadlocks silently or returns empty output. `sandbox: true` stays compatible: it restricts terminal commands only, not file reads.
+The host OpenCode agent is responsible for editing code, running local Docker
+builds/tests/containers, Git commits/pushes, PRs and merges. **Antigravity is
+only the secondary reviewer** of excerpts, logs and test failures. No agent
+executes remote deployment commands. Existing CI/CD pipelines are independent
+of this plugin.
 
 ```json
 {
-  "prompt": "Read this PDF and extract every line item into a markdown table.",
-  "tier": "flash-3.8-lo",
-  "dir": "/path/to/the/files/parent/directory",
-  "yolo": true,
-  "sandbox": true
+  "prompt": "Review the following test failure and suggest a fix: AssertionError on src/utils.ts:42 ...",
+  "tier": "flash-3.8-med",
+  "timeout": "5m"
 }
 ```
+
+- Each call runs `agy -p` with `--sandbox` and `--output-format json`, starting
+  in a fresh empty temporary working directory; `stdout` is decoded from the
+  official `status` and `response` JSON fields. A non-`SUCCESS` status,
+  malformed envelope, or a headless permission-denial notice is reported as
+  `AGY_ERROR` rather than silently accepted as success.
+- `yolo: true` / `--dangerously-skip-permissions` is rejected unless **the
+  Windows user explicitly sets** `OPENCODE_AGY_ALLOW_YOLO=1`. Do not enable
+  it for automated projects.
+- `sandbox: false` is rejected in delegated review unless
+  `OPENCODE_AGY_ALLOW_UNSANDBOXED=1` is set. On Windows the sandbox and
+  permission behavior differ from Linux/macOS: **do not treat this as a
+  security boundary against every file operation**.
+- Passing `dir` is blocked by default. If necessary, set
+  `OPENCODE_AGY_ALLOWED_DIRS` to an explicit **semicolon-separated list of
+  canonical project directory paths**; only these directories and children
+  may be passed through `--add-dir`. Their contents may be writable by agy;
+  this option is **not** read-only. Never authorize your home folder,
+  drive roots, credentials or private projects.
+- Passing `project` (Google Cloud project selector) is blocked unless
+  `OPENCODE_AGY_ALLOW_CLOUD_PROJECT=1` is set.
+- Delegated child processes receive a filtered subset of the parent
+  environment, excluding common OpenAI, Codex, GitHub and cloud secret keys.
+  The plugin cannot prevent access to secrets stored elsewhere.
+- The calling main agent remains responsible for verifying results and
+  continuing if Gemini reports a limitation.
+
+### Windows and the local coding pipeline
+
+Run OpenCode/Ralph with `--no-allow-all` and configure OpenCode 2
+`permissions` separately: scoped shell command allowlists, local Docker
+project resources, local Git write/push/merge, and deny unknown/privileged
+commands when unattended. The Gemini plugin **does not grant Docker, GitHub,
+Docker daemon, host filesystem, or SSH privileges** to OpenCode and cannot
+enforce those main-agent permissions.
+
+Do not run an unrestricted `docker system prune --volumes` or
+`docker volume prune` as an automatic maintenance step. Prefer scoped
+`docker compose -p <unique-project> ...` commands (with a reviewed compose
+file) to avoid accidentally touching other containers/volumes. A Docker
+daemon with host-mounted volumes or privileged containers is high trust.
+
+### Review versus changing files
+
+Giving Gemini text excerpts is the intended mode. If a particular review
+needs local file inspection, the user must explicitly approve a narrow
+`OPENCODE_AGY_ALLOWED_DIRS` entry. The plugin cannot guarantee read-only
+file access on Windows; setting `dir` widens access.
+
+### Optional arguments
+
+The tool accepts `prompt`, `tier`, `timeout`, `model`, `continue`,
+`conversation`, `dir`, `project`, `sandbox`, and `yolo`.
+Use `continue` and `conversation` only for earlier review-only sessions.
+Tier defaults to `flash-3.8-med` if available to the authenticated account.
 
 ### Slash command
 
-Invoke agy directly from the OpenCode TUI:
-
-```
-/agy write a full test suite for src/utils/math.ts
-/agy --tier claude-sonnet-5-5-hi --sandbox "scaffold the reports module"
-/agy --tier claude-opus-5-5-hi --timeout 30m "merge feature/auth into main and resolve conflicts"
-/agy --continue "finish the previous task and add docs"
-/agy --tier flash-3.8-lo --yolo --dir /path/to/dir "summarize report.pdf"
+```text
+/agy Review this failing test and propose the smallest fix: ...
 ```
 
 ## Model tiers
@@ -176,30 +175,44 @@ Twelve tiers across four models. The `hi` / `med` / `lo` suffix selects the mode
 > [!WARNING]
 > `flash-3.5-*`, `flash-3.6-*`, `flash-3.7-*`, and `pro-3.1-*` were removed (Enterprise-only upstream) and have **no aliases** — they return `INVALID_TIER`. Map old names: `flash-3.5-hi/med` → `flash-3.8-hi/med`, and the old default `flash-3.7-med` → `flash-3.8-med`.
 
-## Safety & isolation
+## Safety & limits
 
-- Stdin is always detached, so agy can never wait on interactive input.
-- Every failure — timeout, quota, auth, crash, empty output, missing CLI — is returned as `AGY_ERROR [<CODE>]` text plus metadata; the host process stays up.
-- Common token patterns are scrubbed from surfaced output and errors (best-effort, not a guarantee); agy's log is teed to a per-run temporary directory (`0700` on POSIX; inherited Windows temp-directory ACLs) that is removed on every exit path.
-- `yolo: true` is denied by default in this fork. To explicitly allow unrestricted Antigravity tool permissions, set `OPENCODE_AGY_ALLOW_YOLO=1` in the OpenCode server process environment. Avoid it for unattended runs.
-- The plugin executes your installed `agy` binary, and therefore inherits the Antigravity CLI's permissions and service data handling. It does not provide independent isolation. Limit task prompts to non-sensitive material.
-- For security, prefer a locally built fork pinned to a commit over an automatically updated npm `@latest` release.
-- Output is truncated at 100,000 characters as a hard safety cap.
-- Timeouts are handled by agy's own `--print-timeout`, user-controllable via the `timeout` argument.
-- The calling agent owns verification: review the diff before trusting delegated changes.
+This tool forwards selected text to an external model. The model and CLI
+may retain context outside this process. A temporary working directory, a
+shell-command sandbox, deny-on-Ask policies, an allowlist for `dir`, and
+environment scrubbing are **defense-in-depth only**. They are not equivalent
+to running under an isolated operating-system account or virtual machine.
 
-Compatibility is observed empirically against Agy 1.3.5 (check `agy --version`). One caveat: in headless mode agy can expand slash commands when prompt content begins with `/` (or follows a leading newline/tab), so restructure prompts that need literal slash-prefixed content. This plugin intentionally does not expose `--disable-slash-commands`.
-
-## Debugging
-
-A standalone bash wrapper mirrors the plugin (same tiers, same flags) for use outside OpenCode:
-
-```bash
-./scripts/agy-delegate.sh --tier flash-3.8-hi "your task here"
-echo "task" | ./scripts/agy-delegate.sh -
-```
+- Never pass `.env`, private keys, credentials, tokens, customer records, or
+  sensitive infrastructure configuration in review prompts.
+- By default Gemini receives **no project directory**. Explicit `dir` access
+  is powerful: it can enable writes as well as reads.
+- `--sandbox` chiefly restricts terminal execution and does not make every
+  filesystem tool read-only on Windows.
+- In headless mode denied actions may return exit status 0: check the tool's
+  structured status and stderr notices.
+- The plugin's output scrubbing is best-effort and cannot protect secrets
+  already sent to Gemini or exposed by the underlying CLI.
+- The agy executable is resolved from PATH; review installations and avoid
+  untrusted PATH entries. Pin this fork to a commit instead of following a
+  third-party `@latest` release.
+- Review the provider's terms: this is an unofficial way to orchestrate
+  Antigravity via a third-party application.
 
 ## Development
+
+```bash
+bun install --ignore-scripts
+bun test
+bun run typecheck
+bun run build:all
+```
+
+Windows CI runs the host-compatible tests; Linux CI runs the full test
+suite. A real local OpenCode 2.x and Agy 1.3.x smoke test is still needed
+before unattended use.
+
+
 
 ```bash
 bun test           # unit + integration tests
