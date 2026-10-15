@@ -48,6 +48,17 @@ describe("safe delegated review policy", () => {
     expect(prompt).toContain("Task (untrusted text follows):");
   });
 
+  test("common private tokens are scrubbed before sending a prompt", () => {
+    const args = buildAgyArgs({
+      prompt: "Review this log: token=verysecretvalue and Authorization: Bearer ya29.example1234567",
+      analysisOnly: true,
+    });
+    const outgoing = args[args.indexOf("-p") + 1]!;
+    expect(outgoing).toContain("[REDACTED]");
+    expect(outgoing).not.toContain("verysecretvalue");
+    expect(outgoing).not.toContain("ya29.example1234567");
+  });
+
   test("JSON SUCCESS is extracted as plain review text", async () => {
     let actualCwd = "";
     let actualEnv: any = null;
