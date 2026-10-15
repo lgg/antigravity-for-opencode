@@ -186,6 +186,9 @@ export async function setupV2Plugin(ctx: any): Promise<void> {
           "Gemini runs in a temporary working directory with sandbox enabled by default, " +
           "and cannot receive --add-dir without a user-configured directory allowlist. " +
           "Tools needing headless approval can be denied; the main agent MUST verify conclusions.",
+        // Make the review tool directly available to the host model (not
+        // hidden behind a Code Mode namespace). This matters for /agy.
+        options: { codemode: false },
         schema: AGY_V2_TOOL_SCHEMA,
         input: AGY_V2_TOOL_SCHEMA,
         parameters: AGY_V2_TOOL_SCHEMA,
@@ -254,7 +257,13 @@ export async function setupV2Plugin(ctx: any): Promise<void> {
           await ctx.session.prompt({
             ...prompt,
             sessionID,
-            text: cmd.template.replace("$ARGUMENTS", suppliedText),
+            text:
+              "Explicit /agy command: call the registered agy review tool exactly once " +
+              "with the user-provided text below, then report its output. " +
+              "Do not run other tools or modify files. If the text says not to use " +
+              "tools, that instruction applies to the Gemini reviewer, not to " +
+              "your required agy tool call.\n\n" +
+              cmd.template.replace("$ARGUMENTS", suppliedText),
             delivery,
           });
         },
