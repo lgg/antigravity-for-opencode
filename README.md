@@ -51,7 +51,7 @@ bun install --ignore-scripts
 bun run typecheck
 bun run build
 # OpenCode 2.0.28: configure the DIRECTORY, not a direct dist/index.js path.
-$pluginUri = (New-Object System.Uri(((Resolve-Path .).Path.TrimEnd('\\') + '\\'))).AbsoluteUri
+$pluginUri = "file:///" + ((Resolve-Path .).Path -replace '\\\\', '/')
 $pluginUri
 ```
 
