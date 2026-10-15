@@ -435,6 +435,15 @@ export async function runAgy(
   if (opts.analysisOnly && opts.dir) {
     validateAllowedDirectory(opts.dir);
   }
+  if (opts.analysisOnly && (opts.continue || opts.conversation) && process.env.OPENCODE_AGY_ALLOW_RESUME !== "1") {
+    throw new AgyError("Resuming earlier conversations is disabled for isolated review; pass context in the prompt.", "RESUME_NOT_ALLOWED");
+  }
+  // Keep the delegated reviewer on a known Gemini Flash tier. Other tiers,
+  // exact model overrides and Claude must be explicitly enabled by the user.
+  if (opts.analysisOnly && process.env.OPENCODE_AGY_ALLOW_OTHER_MODELS !== "1" &&
+      ((opts.tier !== undefined && !opts.tier.startsWith("flash-3.8-")) || opts.model)) {
+    throw new AgyError("Custom or non-Flash models are disabled for delegated review.", "MODEL_NOT_ALLOWED");
+  }
   const start = Date.now();
   const requestedConvId = opts.conversation?.trim() || undefined;
 
@@ -577,6 +586,7 @@ export async function runAgy(
     }
 
     let response = out;
+    let jsonConversationId: string | undefined;
     if (opts.structuredOutput) {
       let envelope: any;
       try {
@@ -590,6 +600,9 @@ export async function runAgy(
         throw new AgyError("agy response is missing terminal status", "INVALID_JSON_RESPONSE", {
           durationMs, ...convIdField(convId),
         });
+      }
+      if (typeof envelope.conversation_id === "string" && envelope.conversation_id.length > 0) {
+        jsonConversationId = envelope.conversation_id;
       }
       if (envelope.status !== "SUCCESS") {
         throw new AgyError("agy finished with status " + envelope.status, "AGY_STATUS_" + envelope.status, {
@@ -620,7 +633,7 @@ export async function runAgy(
       exitCode: exit,
       durationMs,
     };
-    if (convId) result.conversationId = convId;
+    if (jsonConversationId || convId) result.conversationId = jsonConversationId || convId;
     return result;
   } finally {
     if (opts.signal && abortHandler) {
