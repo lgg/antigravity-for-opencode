@@ -33,61 +33,69 @@ A thin OpenCode plugin that delegates **review of supplied text** to the install
 - The **Antigravity CLI** (`agy`): installed, on your `PATH`, and signed in (run `agy` once interactively to authenticate)
 - **OpenCode** 1.x or 2.x
 
-## Install the audited fork (OpenCode 2.x)
+## Install the audited fork (OpenCode 2.x, Windows)
 
-**Do not install `opencode-agy@latest` from npm for this fork.** The
-upstream published 0.12.0 has an incompatible default export on OpenCode
-2.0.28, and that npm package is not maintained by this fork.
+Do **not** use `opencode-agy@latest` from npm for this fork: the published
+upstream package differs from the patched code and fails the OpenCode 2 loader
+with a non-object default export.
 
-From PowerShell 5.1 on Windows 10 (adjust directory if desired):
+Use OpenCode's **global plugin discovery directory**. This avoids local
+`file:///...` entries in the `plugins` configuration, which some 2.0.x
+versions silently ignore. See [OpenCode 2 plugin discovery
+documentation](https://dev.opencode.ai/v2/docs/plugins) and [known v2
+plugin-path issue](https://github.com/anomalyco/opencode/issues/49608).
+
+From **PowerShell 5.1**, with the cloned repository at
+`D:\agents\antigravity-for-opencode`:
 
 ```powershell
-$repo = Join-Path $HOME "dev\antigravity-for-opencode"
-git clone https://github.com/lgg/antigravity-for-opencode.git $repo
+$repo = "D:\agents\antigravity-for-opencode"
 Set-Location $repo
-# Pin a reviewed commit here instead of floating main:
-# git checkout <reviewed-commit-sha>
+# Check out the reviewed/pinned commit for your version before building.
 bun install --ignore-scripts
 bun run typecheck
 bun run build
-# OpenCode 2.0.28: configure the DIRECTORY, not a direct dist/index.js path.
-$pluginUri = "file:///" + ((Resolve-Path .).Path -replace '\\\\', '/')
-$pluginUri
+
+$source = Join-Path $repo "dist\index.js"
+$pluginDir = Join-Path $HOME ".config\opencode\plugins"
+$target = Join-Path $pluginDir "agy-local.js"
+
+if (!(Test-Path $source)) { throw "Built file missing: $source" }
+New-Item -ItemType Directory -Force -Path $pluginDir | Out-Null
+Copy-Item -LiteralPath $source -Destination $target -Force
+Get-Item $target | Select-Object FullName, Length
 ```
 
-In `$HOME\.config\opencode\opencode.json`, preserve all existing model,
-OAuth and provider settings, and update **only** the `plugins` array:
+**Keep the OpenAI OAuth plugin** in your existing
+`$HOME\.config\opencode\opencode.json` and remove any old
+`file:///D:/agents/antigravity-for-opencode` or
+`opencode-agy@latest` entry. The final `plugins` array can be:
 
 ```json
 {
-  "plugins": [
-    "oc-codex-multi-auth",
-    "file:///C:/Users/YOUR_USER/dev/antigravity-for-opencode"
-  ]
+  "plugins": ["oc-codex-multi-auth"]
 }
 ```
 
-Replace the example URI with `$pluginUri` from PowerShell. Do not
-overwrite the rest of your existing JSON. Restart OpenCode and inspect
-startup logs:
+Do not replace the rest of the config or account settings.
+Restart OpenCode and inspect loader logs (no model API call):
 
 ```powershell
 opencode models --standalone --print-logs --log-level debug 2>&1 |
-  Select-String "configured plugin path|loading plugin|failed to load plugin|opencode-agy|antigravity-for-opencode" -Context 1,2
+  Select-String -Pattern "agy-local|opencode-agy|loading plugin|failed to load plugin|WARN|ERROR" -Context 1,2
 ```
 
-Do **not** use `opencode plugin list` to verify a local directory: it
-lists managed package plugins, so a successfully loaded local plugin
-may not appear there. Confirm that it loads in the server logs, then
-test `/agy` with a harmless text-only review. Some OpenCode 2.0.x
-versions silently reject direct `.js` entries in `plugins` with
-`configured plugin path must be a directory`. See
-[upstream OpenCode issue #49608](https://github.com/anomalyco/opencode/issues/49608).
+A healthy run shows `loading plugin` for `agy-local.js` without
+`failed to load plugin`. Note: `opencode plugin list` lists managed
+packages and is **not** a reliable test of discovery-loaded local files.
 
-Do not start an unattended Ralph cycle until this smoke test passes.
+Then test `/agy` against a harmless text-only prompt while attended.
+Only after a real OpenCode 2 + agy smoke test passes should you enable
+unattended Ralph iterations. On subsequent rebuilds, copy `dist/index.js`
+into the discovery directory again.
 
-OpenCode 1.x needs `plugin` (singular) and a local
-`file:///.../dist/v1.js` entrypoint; this fork's primary target is 2.x.
+OpenCode 1.x uses a separate callable entrypoint `dist/v1.js`, and
+its plugin loading procedure is different.
 
 ## Usage: review-only delegated Gemini (default)
 
